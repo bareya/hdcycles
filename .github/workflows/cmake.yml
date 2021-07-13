@@ -1,0 +1,60 @@
+name: Blackbird Hydra Delegate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: piotrbarejko/blackbird
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Environment Setup
+      run: echo "/opt/rh/devtoolset-6/root/usr/bin/" >> $GITHUB_PATH
+
+    - name: Configure CoreBlackbird CMake
+      run: |
+        git clone https://github.com/tangent-opensource/coreBlackbird.git --depth 1
+        cmake coreBlackbird -G Ninja -B coreBlackbird-build \
+          -DBUILD_WITH_REZ=OFF \
+          -DWITH_CYCLES_OPENIMAGEDENOISE=OFF \
+          -DWITH_CYCLES_OSL=OFF \
+          -DWITH_CYCLES_STANDALONE_GUI=OFF \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DWITH_CYCLES_LOGGING=OFF -DCMAKE_CXX_STANDARD=14 -DBUILD_SHARED_LIBS=OFF -DBoost_NO_BOOST_CMAKE=ON
+
+    - name: Build CoreBlackbird
+      run: cmake --build coreBlackbird-build --config ${{env.BUILD_TYPE}} --target install
+
+    - name: Configure HdBlackbird CMake
+      run: cmake -G Ninja -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DUSD_ROOT=/usr/local/ -DCMAKE_INSTALL_PREFIX=installdir
+
+    - name: Build HdBlackbird
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target install
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: hdBlackbird
+        path: installdir
+
+  tests:
+    needs: build
+    runs-on: ubuntu-latest
+    container: piotrbarejko/blackbird
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: hdBlackbird
+
